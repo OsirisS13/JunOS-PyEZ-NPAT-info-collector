@@ -1,0 +1,102 @@
+from jnpr.junos import Device
+import jnpr.junos
+#for user prompt to enter passwords 
+from getpass import getpass
+#used to parse the xml???
+from lxml import etree
+import sys
+
+#function to write data to text file
+def writefile(name,contents):
+	#open file in append mode, will create if file doesnt exist
+	file = open(name,'a')
+	#check to see if the contents is a string, if it is then write directly to file, if not then parse it from xml to string, and strip the output tags
+	if isinstance(contents, basestring) == False:
+		contents = etree.tostring(contents)
+		contents = contents.replace('<output>', '')
+		contents = contents.replace("</output>", "")
+		#print contents
+		file.write(contents)
+	else:
+		print ('%s file written' %name)
+		file.write(contents)
+	return
+
+def get_data(ipaddress, username, passwd):
+	#check to see if netconf is reachable, otherwise timeout after
+	Device.auto_probe = 2
+	#create device object
+	dev = Device(host=ipaddress, user=username, password=passwd, port = "22" )
+	#connet to device
+	try:
+		dev.open()
+		print("\nNETCONF connection to %s opened!" %ipaddress)
+		print("Beginning data collection...")
+		#collect all data
+		#store facts
+		devicefacts = dev.facts
+		#get config
+		config = dev.rpc.get_config()
+		#get hostname
+		hostname = devicefacts['hostname'].replace("'","")
+		#get hardware ("show chassis hardware ")
+		hw = dev.rpc.get_chassis_inventory({'format':'text'})
+		#get hw models
+		hwmodel = dev.rpc.get_chassis_inventory({'format':'text'}, models=True)
+		#print dev.cli("show version|no-more")
+		#get software (show version)
+		sw = dev.rpc.get_software_information({'format':'text'})
+		#get fpc info
+		fpc = dev.rpc.get_fpc_information({'format':'text'})
+		#get interface info
+		interface = dev.rpc.get_interface_information({'format':'text'})
+		#get ted data base info (show ted database extensive)
+		ted = dev.rpc.get_ted_database_information({'format':'text'}, extensive=True)
+		#get rsvp ingress (show rsvp session ingress detail logical-router all|no-more)
+		rsvp_ingress = dev.rpc.get_rsvp_session_information({'format':'text'}, ingress=True)
+		rsvp_transit = dev.rpc.get_rsvp_session_information({'format':'text'}, transit=True)
+		lsp_stats = dev.rpc.get_mpls_lsp_information({'format':'text'}, extensive=True, statistics = True ,ingress=True)
+
+		#write data to files
+		#config file
+		writefile(hostname + " Config.txt", config)
+		#equipment file
+		writefile(hostname + " Equipment.txt", hostname)
+		writefile(hostname + " Equipment.txt", sw)
+		writefile(hostname + " Equipment.txt", hw)
+		writefile(hostname + " Equipment.txt", fpc)
+		writefile(hostname + " Equipment.txt", hwmodel)
+		#Interface file
+		writefile(hostname + " Interface.txt", hostname)
+		writefile(hostname + " Interface.txt", interface)
+		#topology file
+		writefile(hostname + " Topology.txt", ted)
+		#transit tunnel file
+		writefile(hostname + " Transit Tunnel.txt", hostname)
+		writefile(hostname + " Transit Tunnel.txt", rsvp_ingress)
+		writefile(hostname + " Transit Tunnel.txt", rsvp_transit)
+		#tunnel path file
+		writefile(hostname + " Tunnel Path.txt", hostname)
+		writefile(hostname + " Tunnel Path.txt", lsp_stats)
+		print("Operation Complete.")
+		dev.close()
+		print("NETCONF connection to %s is now closed.\n" %ipaddress)
+	#if probe times out and raises a probe error
+	except jnpr.junos.exception.ProbeError as e: 
+		print("NETCONF connection to %s is not reachable, moving on.." %ipaddress)
+	#any other error
+	except Exception as e:
+		print (e)
+
+#user inputs
+user = raw_input("Username: ")	
+passwd = getpass("Device password: ")
+startip = input("Enter start third octect number: ")
+endip = input("Enter end third octect number: ")
+#generate and loop through data collection for ip addresses from 10.189.x.10 where x begins at intial "i" value and ends at the while < value.
+i = startip
+while i < endip:
+        val = str(i)
+        currentip = ( "10.189.%s.10" %val)
+        i = i + 1
+	get_data(currentip,user, passwd)
