@@ -15,6 +15,8 @@ def writefile(name,contents):
 		contents = etree.tostring(contents)
 		contents = contents.replace('<output>', '')
 		contents = contents.replace("</output>", "")
+		contents = contents.replace("<configuration-text>", "")
+		contents = contents.replace("</configuration-text>", "")
 		#print contents
 		file.write(contents)
 	else:
@@ -22,9 +24,22 @@ def writefile(name,contents):
 		file.write(contents)
 	return
 
+#function to convert xml to string and strip some tags to make it emulate cli output
+def convert_etree_to_string(etree_input):
+	if isinstance(etree_input, basestring) == False:
+		etree_input = etree.tostring(etree_input)
+		etree_input = etree_input.replace('<output>', '')
+		etree_input = etree_input.replace("</output>", "")
+		etree_input = etree_input.replace("<configuration-text>", "")
+		etree_input = etree_input.replace("</configuration-text>", "")
+		#print contents
+		return etree_input
+	else:
+		return etree_input		
+	
 def get_data(ipaddress, username, passwd):
 	#check to see if netconf is reachable, otherwise timeout after
-	Device.auto_probe = 2
+	Device.auto_probe = 1
 	#create device object
 	dev = Device(host=ipaddress, user=username, password=passwd, port = "22" )
 	#connet to device
@@ -35,49 +50,58 @@ def get_data(ipaddress, username, passwd):
 		#collect all data
 		#store facts
 		devicefacts = dev.facts
-		#get config
-		config = dev.rpc.get_config()
 		#get hostname
 		hostname = devicefacts['hostname'].replace("'","")
+		#get config
+		config = convert_etree_to_string(dev.rpc.get_config(options={'format':'text'}))
+		config = hostname + "> show config|display inheritance|no-more \n" + config
 		#get hardware ("show chassis hardware ")
-		hw = dev.rpc.get_chassis_inventory({'format':'text'})
+		hw = convert_etree_to_string(dev.rpc.get_chassis_inventory({'format':'text'}))
+		hw = hostname + "> show chassis hardware|no-more\n " + hw  
 		#get hw models
-		hwmodel = dev.rpc.get_chassis_inventory({'format':'text'}, models=True)
-		#print dev.cli("show version|no-more")
+		hwmodel = convert_etree_to_string(dev.rpc.get_chassis_inventory({'format':'text'}, models=True))
+		hwmodel = hostname + "> show chassis hardware models|no-more \n" + hwmodel
 		#get software (show version)
-		sw = dev.rpc.get_software_information({'format':'text'})
+		sw = convert_etree_to_string(dev.rpc.get_software_information({'format':'text'}))
+		sw = hostname + "> show version|no-more \n" + sw
 		#get fpc info
-		fpc = dev.rpc.get_fpc_information({'format':'text'})
+		fpc = convert_etree_to_string(dev.rpc.get_fpc_information({'format':'text'}))
+		fpc = hostname + "> show chssis fpc|no-more \n" + fpc
 		#get interface info
-		interface = dev.rpc.get_interface_information({'format':'text'})
+		interface = convert_etree_to_string(dev.rpc.get_interface_information({'format':'text'}))
+		interface = hostname + "> show interfaces|no-more \n" + interface
 		#get ted data base info (show ted database extensive)
-		ted = dev.rpc.get_ted_database_information({'format':'text'}, extensive=True)
+		ted = convert_etree_to_string(dev.rpc.get_ted_database_information({'format':'text'}, extensive=True))
+		ted = hostname + "> show ted database extensive|no-more \n" + ted
 		#get rsvp ingress (show rsvp session ingress detail logical-router all|no-more)
-		rsvp_ingress = dev.rpc.get_rsvp_session_information({'format':'text'}, ingress=True)
-		rsvp_transit = dev.rpc.get_rsvp_session_information({'format':'text'}, transit=True)
-		lsp_stats = dev.rpc.get_mpls_lsp_information({'format':'text'}, extensive=True, statistics = True ,ingress=True)
+		rsvp_ingress = convert_etree_to_string(dev.rpc.get_rsvp_session_information({'format':'text'}, ingress=True))
+		rsvp_ingress = hostname + "> show rsvp session ingress detail | no-more \n" + rsvp_ingress
+		rsvp_transit = convert_etree_to_string(dev.rpc.get_rsvp_session_information({'format':'text'}, transit=True))
+		rsvp_transit = hostname + "> show rsvp session transit detail | no-more \n" + rsvp_transit
+		lsp_stats = convert_etree_to_string(dev.rpc.get_mpls_lsp_information({'format':'text'}, extensive=True, statistics = True ,ingress=True))
+		lsp_stats = hostname + "> show mpls lsp statistics ingress extensive | no-more \n" + lsp_stats
 
 		#write data to files
 		#config file
-		writefile(hostname + " Config.txt", config)
+		writefile(hostname + "_Config.txt", config)
 		#equipment file
-		writefile(hostname + " Equipment.txt", hostname)
-		writefile(hostname + " Equipment.txt", sw)
-		writefile(hostname + " Equipment.txt", hw)
-		writefile(hostname + " Equipment.txt", fpc)
-		writefile(hostname + " Equipment.txt", hwmodel)
+		writefile(hostname + "_Equipment.txt", hostname + " show configuration system hostname \n host-name " + hostname + "\n \n")
+		writefile(hostname + "_Equipment.txt", sw)
+		writefile(hostname + "_Equipment.txt", hw)
+		writefile(hostname + "_Equipment.txt", fpc)
+		writefile(hostname + "_Equipment.txt", hwmodel)
 		#Interface file
-		writefile(hostname + " Interface.txt", hostname)
-		writefile(hostname + " Interface.txt", interface)
+		writefile(hostname + "_Interface.txt", hostname + " show configuration system hostname \n host-name " + hostname + "\n \n")
+		writefile(hostname + "_Interface.txt", interface)
 		#topology file
-		writefile(hostname + " Topology.txt", ted)
+		writefile(hostname + "_Topology.txt", ted)
 		#transit tunnel file
-		writefile(hostname + " Transit Tunnel.txt", hostname)
-		writefile(hostname + " Transit Tunnel.txt", rsvp_ingress)
-		writefile(hostname + " Transit Tunnel.txt", rsvp_transit)
+		writefile(hostname + "_TransitTunnel.txt", hostname + " show configuration system hostname \n host-name " + hostname + "\n \n")
+		writefile(hostname + "_TransitTunnel.txt", rsvp_ingress)
+		writefile(hostname + "_TransitTunnel.txt", rsvp_transit)
 		#tunnel path file
-		writefile(hostname + " Tunnel Path.txt", hostname)
-		writefile(hostname + " Tunnel Path.txt", lsp_stats)
+		writefile(hostname + "_TunnelPath.txt", hostname + " show configuration system hostname \n host-name " + hostname + "\n \n")
+		writefile(hostname + "_TunnelPath.txt", lsp_stats)
 		print("Operation Complete.")
 		dev.close()
 		print("NETCONF connection to %s is now closed.\n" %ipaddress)
